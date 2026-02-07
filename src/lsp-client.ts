@@ -128,6 +128,7 @@ export class RoslynLspClient {
         'Information',
         '--extensionLogDirectory',
         logDir,
+        '--autoLoadProjects',  // Auto-discover and load projects from workspace folders
       ], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
@@ -499,11 +500,12 @@ export class RoslynLspClient {
         if (typeDefResult && typeDefResult.length > 0) {
           const resultUri = typeDefResult[0].uri;
           
-          // Check if the result URI contains "roslyn-canonical-misc"
+          // Check if the result URI contains "roslyn-canonical-misc" (still in Canonical)
           if (resultUri.includes('roslyn-canonical-misc')) {
             this.log(`  [Attempt ${attempt}/${maxRetries}] Still in Canonical project, retrying...`, 'verbose');
-          } else if (resultUri.startsWith('csharp:/metadata/')) {
+          } else if (resultUri.startsWith('csharp:/metadata/') || resultUri.includes('/MetadataAsSource/')) {
             // Got metadata URI for NuGet package - SUCCESS!
+            // Can be either csharp:/metadata/... or file:///tmp/MetadataAsSource/...
             this.log(`✅ Document loaded into real project (attempt ${attempt})`, 'info');
             this.log(`   Result URI: ${resultUri}`, 'verbose');
             return;
