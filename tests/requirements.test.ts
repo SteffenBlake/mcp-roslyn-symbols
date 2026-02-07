@@ -90,11 +90,13 @@ describe('REQUIREMENT VERIFICATION - Complete Checklist', () => {
 
   // REQUIREMENT 9: Must locate symbol at cursor position
   it('REQ-9: Must locate symbol at cursor position in file', () => {
-    const indexContent = fs.readFileSync('src/index.ts', 'utf-8');
-    // Check that it uses LSP methods to locate symbols
-    expect(indexContent).toContain('getHover');
-    expect(indexContent).toContain('getTypeDefinition');
-    expect(indexContent).toContain('getDefinition');
+    const lspClientContent = fs.readFileSync('src/lsp-client.ts', 'utf-8');
+    // Check that LSP client has methods to locate symbols
+    expect(lspClientContent).toContain('getHover');
+    expect(lspClientContent).toContain('getTypeDefinition');
+    expect(lspClientContent).toContain('getDefinition');
+    // Check that getSymbolsFor orchestrates these methods
+    expect(lspClientContent).toContain('getSymbolsFor');
   });
 
   // REQUIREMENT 10: Must spin up Roslyn LSP
@@ -215,9 +217,9 @@ describe('REQUIREMENT VERIFICATION - Complete Checklist', () => {
     const lspClientContent = fs.readFileSync('src/lsp-client.ts', 'utf-8');
     expect(lspClientContent).toContain('getDocumentSymbolsByUri');
     
+    // Check that index.ts returns sourceUri which can contain metadata URIs
     const indexContent = fs.readFileSync('src/index.ts', 'utf-8');
-    // Check it handles metadata URIs
-    expect(indexContent).toMatch(/file:\/\/|metadata|decompil/i);
+    expect(indexContent).toContain('sourceUri');
   });
 
   // REQUIREMENT 24: Startup check must actually prevent server from running

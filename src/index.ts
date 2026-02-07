@@ -14,9 +14,6 @@ import { checkRoslynLanguageServer, printInstallationInstructions } from './rosl
 import {
   RoslynLspClient,
   SymbolType,
-  filterSymbolsByType,
-  formatSymbols,
-  DocumentSymbol,
 } from './lsp-client.js';
 
 // Check if roslyn-language-server is installed
@@ -151,154 +148,33 @@ class RoslynSymbolsServer {
         await this.lspClient.start(workspaceRoot);
       }
 
-      // Open the document
-      await this.lspClient.openDocument(filePath);
-      
-      // Give LSP time to analyze
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Use the new getSymbolsFor() method
+      const result = await this.lspClient.getSymbolsFor(filePath, line, character, {
+        symbolType,
+        signaturesOnly,
+      });
 
-      // Try to get hover information first (more reliable)
-      const hover = await this.lspClient.getHover(filePath, line, character);
-      
-      let typeInfo: any = null;
-      if (hover && hover.contents) {
-        // Extract type information from hover
-        const hoverText = typeof hover.contents === 'string' 
-          ? hover.contents 
-          : hover.contents.value || hover.contents.toString();
-        
-        typeInfo = {
-          hoverText,
-          position: { line, character },
-        };
-      }
-
-      // Try type definition
-      const typeDefinitions = await this.lspClient.getTypeDefinition(filePath, line, character);
-      
-      if (typeDefinitions && typeDefinitions.length > 0) {
-        const typeDef = typeDefinitions[0];
-        const typeDefPath = typeDef.uri.replace('file://', '');
-
-        try {
-          // Open the type definition file
-          await this.lspClient.openDocument(typeDefPath);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-
-          // Get document symbols from the type definition
-          let symbols = await this.lspClient.getDocumentSymbols(typeDefPath);
-
-          // Filter symbols if symbolType is specified
-          if (symbolType) {
-            symbols = filterSymbolsByType(symbols, symbolType);
-          }
-
-          // Format the symbols
-          const formattedSymbols = formatSymbols(symbols, signaturesOnly);
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  typeDefinitionFile: typeDefPath,
-                  typeInfo,
-                  symbols: formattedSymbols,
-                  symbolCount: formattedSymbols.length,
-                }, null, 2),
-              },
-            ],
-          };
-        } catch (error) {
-          // If we can't access the type definition file, return hover info
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  message: 'Type definition file not accessible (likely from compiled assembly)',
-                  typeInfo,
-                  note: 'Symbol information not available for compiled types without source/metadata',
-                }, null, 2),
-              },
-            ],
-          };
-        }
-      }
-
-      // Try regular definition as fallback
-      const definitions = await this.lspClient.getDefinition(filePath, line, character);
-      
-      if (definitions && definitions.length > 0) {
-        const def = definitions[0];
-        const defPath = def.uri.replace('file://', '');
-        
-        try {
-          // Open the definition file and get its symbols
-          await this.lspClient.openDocument(defPath);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          
-          let symbols = await this.lspClient.getDocumentSymbols(defPath);
-          
-          // Filter and format symbols
-          if (symbolType) {
-            symbols = filterSymbolsByType(symbols, symbolType);
-          }
-          
-          const formattedSymbols = formatSymbols(symbols, signaturesOnly);
-          
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  definitionFile: defPath,
-                  typeInfo,
-                  symbols: formattedSymbols,
-                  symbolCount: formattedSymbols.length,
-                }, null, 2),
-              },
-            ],
-          };
-        } catch (error) {
-          // Return just the type info
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  message: 'Definition file not accessible',
-                  typeInfo,
-                  note: 'Symbol information not available',
-                }, null, 2),
-              },
-            ],
-          };
-        }
-      }
-
-      // If we only have hover info, return that
-      if (typeInfo) {
+      // Return the result
+      if (result.symbols.length === 0) {
         return {
           content: [
             {
               type: 'text',
-              text: JSON.stringify({
-                message: 'Type information found but symbol details not available',
-                typeInfo,
-                note: 'The symbol may be from a compiled assembly. Try enabling metadata/decompilation in Roslyn LSP.',
-              }, null, 2),
+              text: `No symbols found at line ${line}, character ${character}`,
             },
           ],
         };
       }
 
-      // No information found
       return {
         content: [
           {
             type: 'text',
-            text: `No symbol found at line ${line}, character ${character}`,
+            text: JSON.stringify({
+              sourceUri: result.sourceUri,
+              symbols: result.symbols,
+              symbolCount: result.symbols.length,
+            }, null, 2),
           },
         ],
       };

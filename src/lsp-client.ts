@@ -590,6 +590,98 @@ export class RoslynLspClient {
 
     return result || [];
   }
+
+  /**
+   * High-level method to get symbols for a type at a specific position
+   * 
+   * This method encapsulates all orchestration:
+   * - Opens document if needed
+   * - Waits for project load on first request
+   * - Gets type definition or regular definition
+   * - Opens the definition URI
+   * - Gets document symbols
+   * - Flattens hierarchical symbols
+   * - Filters by symbolType if provided
+   * - Formats with signaturesOnly if provided
+   * 
+   * @param filePath - Path to the source file
+   * @param line - Line number (0-indexed)
+   * @param character - Character position (0-indexed)
+   * @param options - Optional filtering and formatting options
+   * @returns Object with symbols array and metadata
+   */
+  async getSymbolsFor(
+    filePath: string, 
+    line: number, 
+    character: number, 
+    options?: { symbolType?: SymbolType; signaturesOnly?: boolean }
+  ): Promise<{ symbols: any[]; typeInfo?: any; sourceUri?: string }> {
+    const uri = `file://${filePath}`;
+
+    // Ensure document is opened
+    if (!this.openDocuments.has(uri)) {
+      await this.openDocument(filePath);
+    }
+
+    // Wait for project load if first request
+    if (!this.buildHostLoaded) {
+      await this.waitForProjectLoad(filePath);
+    }
+
+    // Try type definition first
+    const typeDefinitions = await this.getTypeDefinition(filePath, line, character);
+    
+    if (typeDefinitions && typeDefinitions.length > 0) {
+      const typeDefUri = typeDefinitions[0].uri;
+      
+      // Get document symbols from the type definition
+      let symbols = await this.getDocumentSymbolsByUri(typeDefUri);
+      
+      // Flatten hierarchical symbols
+      symbols = flattenSymbols(symbols);
+      
+      // Filter by symbolType if provided
+      if (options?.symbolType) {
+        symbols = filterSymbolsByType(symbols, options.symbolType);
+      }
+      
+      // Format with signaturesOnly if provided
+      const formattedSymbols = formatSymbols(symbols, options?.signaturesOnly || false);
+      
+      return {
+        symbols: formattedSymbols,
+        sourceUri: typeDefUri,
+      };
+    }
+
+    // Fallback to regular definition
+    const definitions = await this.getDefinition(filePath, line, character);
+    
+    if (!definitions || definitions.length === 0) {
+      return { symbols: [] };
+    }
+
+    const defUri = definitions[0].uri;
+    
+    // Get document symbols
+    let symbols = await this.getDocumentSymbolsByUri(defUri);
+    
+    // Flatten hierarchical symbols
+    symbols = flattenSymbols(symbols);
+    
+    // Filter by symbolType if provided
+    if (options?.symbolType) {
+      symbols = filterSymbolsByType(symbols, options.symbolType);
+    }
+    
+    // Format with signaturesOnly if provided
+    const formattedSymbols = formatSymbols(symbols, options?.signaturesOnly || false);
+    
+    return {
+      symbols: formattedSymbols,
+      sourceUri: defUri,
+    };
+  }
 }
 
 /**
@@ -642,4 +734,19 @@ export function formatSymbols(symbols: DocumentSymbol[], signaturesOnly: boolean
 
     return result;
   });
+}
+
+/**
+ * Flattens hierarchical document symbols into a flat array
+ */
+function flattenSymbols(symbols: DocumentSymbol[]): DocumentSymbol[] {
+  const flattened: DocumentSymbol[] = [];
+  function traverse(symbol: DocumentSymbol) {
+    flattened.push(symbol);
+    if (symbol.children && symbol.children.length > 0) {
+      symbol.children.forEach(traverse);
+    }
+  }
+  symbols.forEach(traverse);
+  return flattened;
 }
