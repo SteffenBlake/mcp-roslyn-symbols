@@ -204,7 +204,7 @@ describe('REQUIREMENT VERIFICATION - Complete Checklist', () => {
   it('REQ-22: Test .NET project must build successfully', () => {
     expect(() => {
       execSync('dotnet build', { 
-        cwd: path.join(process.cwd(), 'test-project'),
+        cwd: path.join(process.cwd(), 'test-project', 'TestProject'),
         stdio: 'pipe' 
       });
     }).not.toThrow();
@@ -242,11 +242,11 @@ describe('INTEGRATION REQUIREMENTS - Functional Tests', () => {
     if (roslynAvailable) {
       // Ensure test project is built
       execSync('dotnet restore', { 
-        cwd: path.join(process.cwd(), 'test-project'),
+        cwd: path.join(process.cwd(), 'test-project', 'TestProject'),
         stdio: 'pipe' 
       });
       execSync('dotnet build', { 
-        cwd: path.join(process.cwd(), 'test-project'),
+        cwd: path.join(process.cwd(), 'test-project', 'TestProject'),
         stdio: 'pipe' 
       });
     }

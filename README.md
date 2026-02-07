@@ -93,7 +93,10 @@ Test cases include:
 ├── tests/
 │   └── *.test.ts         # Test suite
 ├── test-project/
+│   ├── TestProject.slnx  # Solution file (workspace root for LSP)
 │   └── TestProject/      # Test C# project
+│       ├── TestProject.csproj
+│       └── Program.cs
 └── dist/                 # Compiled JavaScript output
 ```
 
