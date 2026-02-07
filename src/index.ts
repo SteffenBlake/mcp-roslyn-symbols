@@ -154,18 +154,7 @@ class RoslynSymbolsServer {
         signaturesOnly,
       });
 
-      // Return the result
-      if (result.symbols.length === 0) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `No symbols found at line ${line}, character ${character}`,
-            },
-          ],
-        };
-      }
-
+      // Return the result in consistent JSON format
       return {
         content: [
           {
