@@ -217,9 +217,9 @@ export class RoslynLspClient {
       const level = message.params?.type || 3;
       const text = message.params?.message || '';
       
-      // Check for BuildHost completion FIRST
-      if (text.includes('Completed (re)load of all projects') || 
-          text.includes('Restore complete')) {
+      // Check for BuildHost completion - ONLY wait for the final "Completed (re)load"
+      // NOT "Restore complete" which happens earlier!
+      if (text.includes('Completed (re)load of all projects')) {
         this.buildHostLoaded = true;
         if (this.projectLoadPromise) {
           this.projectLoadPromise.resolve();
@@ -232,6 +232,11 @@ export class RoslynLspClient {
         console.error(`LSP [${level === 1 ? 'ERROR' : 'WARN'}]: ${text}`);
       } else if (level === 3) {
         console.error(`LSP [INFO]: ${text}`);
+      }
+      
+      // Log if we see TestProject being loaded (not just Canonical)
+      if (text.includes('TestProject.csproj') || text.includes('TestProject')) {
+        console.error(`🎯 IMPORTANT: TestProject mentioned: ${text}`);
       }
     } else if (message.method === 'textDocument/publishDiagnostics') {
       const uri = message.params?.uri || '';
@@ -422,8 +427,9 @@ export class RoslynLspClient {
     // Add solution path if found
     if (solutionPath) {
       initOptions.initializationOptions = {
-        solution: solutionPath,
+        solution: `file://${solutionPath}`,
       };
+      console.error(`LSP: Passing solution as URI: file://${solutionPath}`);
     }
     
     const result = await this.sendRequest('initialize', initOptions);
@@ -431,8 +437,10 @@ export class RoslynLspClient {
     this.sendNotification('initialized', {});
     this.initialized = true;
     
-    // Give the LSP more time to fully initialize and load the solution
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Wait for solution to load - Roslyn needs time to scan and load solution projects
+    // We need to wait for a log message indicating the solution projects are loaded
+    console.error('LSP: Waiting for solution/workspace to load...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
   }
 
   /**
