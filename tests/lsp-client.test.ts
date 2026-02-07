@@ -5,7 +5,7 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 
 const testProjectPath = path.resolve(process.cwd(), 'test-project');
-const programPath = path.join(testProjectPath, 'Program.cs');
+const programPath = path.join(testProjectPath, 'TestProject', 'Program.cs');
 
 describe('RoslynLspClient Integration Tests', () => {
   let client: RoslynLspClient | null = null;
@@ -54,7 +54,7 @@ describe('RoslynLspClient Integration Tests', () => {
   it.skipIf(!roslynAvailable)('should open a document', async () => {
     if (!client) return;
     await expect(client.openDocument(programPath)).resolves.not.toThrow();
-  }, 10000);
+  }, 70000); // 70 seconds to allow for diagnostics timeout (60s) + buffer
 });
 
 describe('Symbol Utilities', () => {
