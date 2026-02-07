@@ -77,6 +77,8 @@ export class RoslynLspClient {
   private pendingRequests = new Map<number, { resolve: (value: any) => void; reject: (error: any) => void }>();
   private buffer = '';
   private initialized = false;
+  private openDocuments = new Set<string>();
+  private diagnosticsPromises = new Map<string, { resolve: () => void; reject: (error: any) => void }>();
 
   /**
    * Starts the Roslyn Language Server
@@ -204,6 +206,39 @@ export class RoslynLspClient {
       // Log levels: 1=Error, 2=Warning, 3=Info, 4=Log
       if (level <= 2) {
         console.error(`LSP [${level === 1 ? 'ERROR' : 'WARN'}]: ${text}`);
+      } else if (level === 3) {
+        // Log info messages for debugging
+        console.error(`LSP [INFO]: ${text}`);
+      }
+    } else if (message.method === 'textDocument/publishDiagnostics') {
+      // This notification means the LSP has finished analyzing the document
+      const uri = message.params?.uri || '';
+      const diagnostics = message.params?.diagnostics || [];
+      
+      console.error(`LSP: Received diagnostics for ${uri} (${diagnostics.length} items)`);
+      
+      if (diagnostics.length > 0) {
+        diagnostics.forEach((d: any) => {
+          const severity = d.severity === 1 ? 'ERROR' : d.severity === 2 ? 'WARNING' : d.severity === 3 ? 'INFO' : 'HINT';
+          console.error(`  [${severity}] Line ${d.range.start.line + 1}: ${d.message}`);
+        });
+      }
+      
+      // Resolve the promise for this document if one is waiting
+      if (this.diagnosticsPromises.has(uri)) {
+        const { resolve } = this.diagnosticsPromises.get(uri)!;
+        this.diagnosticsPromises.delete(uri);
+        resolve();
+      }
+    } else if (message.method === '$/progress') {
+      // Progress notification
+      const token = message.params?.token;
+      const value = message.params?.value;
+      
+      if (value?.kind === 'begin') {
+        console.error(`LSP Progress [${token}]: ${value.title || 'Started'}`);
+      } else if (value?.kind === 'end') {
+        console.error(`LSP Progress [${token}]: Completed`);
       }
     }
   }
@@ -213,13 +248,33 @@ export class RoslynLspClient {
    */
   private handleServerRequest(message: any): void {
     if (message.method === 'workspace/configuration') {
-      // Respond with empty configuration for each item
+      // Respond with configuration for each item
       const items = message.params?.items || [];
-      const config = items.map(() => ({}));
+      
+      const config = items.map((item: any) => {
+        const section = item.section || '';
+        
+        // Enable decompilation and source navigation
+        if (section.includes('dotnet_navigate_to_decompiled_sources')) {
+          return true;
+        }
+        if (section.includes('dotnet_navigate_to_source_link_and_embedded_sources')) {
+          return true;
+        }
+        if (section.includes('dotnet_search_reference_assemblies')) {
+          return true;
+        }
+        
+        // Return null for other configs (use defaults)
+        return null;
+      });
       
       this.sendResponse(message.id, config);
     } else if (message.method === 'client/registerCapability') {
       // Acknowledge capability registration
+      this.sendResponse(message.id, null);
+    } else if (message.method === 'window/workDoneProgress/create') {
+      // Acknowledge progress token creation
       this.sendResponse(message.id, null);
     } else {
       // Send empty response for unknown requests
@@ -349,11 +404,31 @@ export class RoslynLspClient {
   }
 
   /**
-   * Opens a document in the LSP
+   * Opens a document in the LSP and waits for it to be analyzed
    */
   async openDocument(filePath: string): Promise<void> {
     const uri = `file://${filePath}`;
+    
+    // Don't re-open already opened documents
+    if (this.openDocuments.has(uri)) {
+      return;
+    }
+    
     const text = readFileSync(filePath, 'utf-8');
+
+    // Create a promise that will resolve when we get diagnostics for this document
+    const diagnosticsPromise = new Promise<void>((resolve, reject) => {
+      this.diagnosticsPromises.set(uri, { resolve, reject });
+      
+      // Set a longer timeout for Roslyn (can take 5-30 seconds on first load)
+      setTimeout(() => {
+        if (this.diagnosticsPromises.has(uri)) {
+          this.diagnosticsPromises.delete(uri);
+          console.error(`Warning: Diagnostics timeout for ${uri} after 60 seconds, continuing anyway`);
+          resolve();
+        }
+      }, 60000); // 60 second timeout for Roslyn to restore packages and build workspace
+    });
 
     this.sendNotification('textDocument/didOpen', {
       textDocument: {
@@ -363,14 +438,31 @@ export class RoslynLspClient {
         text,
       },
     });
+    
+    this.openDocuments.add(uri);
 
-    // Give the LSP time to process the document
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Wait for the LSP to send diagnostics, indicating it has analyzed the document
+    console.error(`Waiting for diagnostics for ${uri}...`);
+    await diagnosticsPromise;
+    console.error(`✓ Diagnostics received for ${uri}`);
   }
 
   /**
-   * Gets the definition of a symbol at a position
+   * Closes a document in the LSP
    */
+  closeDocument(filePath: string): void {
+    const uri = `file://${filePath}`;
+    
+    if (!this.openDocuments.has(uri)) {
+      return;
+    }
+
+    this.sendNotification('textDocument/didClose', {
+      textDocument: { uri },
+    });
+    
+    this.openDocuments.delete(uri);
+  }
   async getDefinition(filePath: string, line: number, character: number): Promise<Location[]> {
     const uri = `file://${filePath}`;
     
@@ -404,6 +496,17 @@ export class RoslynLspClient {
   async getDocumentSymbols(filePath: string): Promise<DocumentSymbol[]> {
     const uri = `file://${filePath}`;
     
+    const result = await this.sendRequest('textDocument/documentSymbol', {
+      textDocument: { uri },
+    });
+
+    return result || [];
+  }
+
+  /**
+   * Gets document symbols from a URI (including metadata URIs)
+   */
+  async getDocumentSymbolsByUri(uri: string): Promise<DocumentSymbol[]> {
     const result = await this.sendRequest('textDocument/documentSymbol', {
       textDocument: { uri },
     });
