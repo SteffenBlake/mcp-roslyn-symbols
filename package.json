@@ -1,0 +1,44 @@
+{
+  "name": "mcp-roslyn-symbols",
+  "version": "1.0.0",
+  "description": "MCP server for Roslyn Language Server symbol information",
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "mcp-roslyn-symbols": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "postbuild": "chmod +x dist/index.js",
+    "prepare": "npm run build",
+    "pretest": "bash scripts/check-lsp.sh",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SteffenBlake/mcp-roslyn-symbols.git"
+  },
+  "keywords": [
+    "mcp",
+    "roslyn",
+    "language-server",
+    "symbols"
+  ],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/SteffenBlake/mcp-roslyn-symbols/issues"
+  },
+  "homepage": "https://github.com/SteffenBlake/mcp-roslyn-symbols#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

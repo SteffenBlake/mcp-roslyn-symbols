@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop, copilot/** ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Install Roslyn Language Server
+      run: |
+        dotnet tool install --global roslyn-language-server --prerelease
+        echo "Roslyn LSP installed at: $(which roslyn-language-server)"
+        roslyn-language-server --version
+        
+    - name: Restore .NET test project
+      run: |
+        cd test-project/TestProject
+        dotnet restore
+        dotnet build
+        
+    - name: Install npm dependencies
+      run: npm ci
+      
+    - name: Build TypeScript
+      run: npm run build
+      
+    - name: Run tests
+      run: npm test
+      
+    - name: Check for uncommitted changes
+      run: |
+        if [[ -n $(git status --porcelain) ]]; then
+          echo "Error: There are uncommitted changes after build"
+          git status
+          git diff
+          exit 1
+        fi
