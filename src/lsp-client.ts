@@ -90,8 +90,7 @@ export class RoslynLspClient {
   private initialized = false;
   private openDocuments = new Set<string>();
   private diagnosticsPromises = new Map<string, { resolve: () => void; reject: (error: any) => void }>();
-  private projectLoadPromise: { resolve: () => void; reject: (error: any) => void } | null = null;
-  private buildHostLoaded = false;
+
 
   /**
    * Starts the Roslyn Language Server
@@ -217,16 +216,6 @@ export class RoslynLspClient {
       const level = message.params?.type || 3;
       const text = message.params?.message || '';
       
-      // Check for BuildHost completion - ONLY wait for the final "Completed (re)load"
-      // NOT "Restore complete" which happens earlier!
-      if (text.includes('Completed (re)load of all projects')) {
-        this.buildHostLoaded = true;
-        if (this.projectLoadPromise) {
-          this.projectLoadPromise.resolve();
-          this.projectLoadPromise = null;
-        }
-      }
-      
       // Log levels: 1=Error, 2=Warning, 3=Info, 4=Log
       if (level <= 2) {
         console.error(`LSP [${level === 1 ? 'ERROR' : 'WARN'}]: ${text}`);
@@ -264,15 +253,6 @@ export class RoslynLspClient {
         console.error(`LSP Progress [${token}]: ${value.title || 'Started'}`);
       } else if (value?.kind === 'end') {
         console.error(`LSP Progress [${token}]: Completed`);
-        
-        const title = value?.title || '';
-        if (title.includes('Loading') || title.includes('Project') || title.includes('Restore')) {
-          this.buildHostLoaded = true;
-          if (this.projectLoadPromise) {
-            this.projectLoadPromise.resolve();
-            this.projectLoadPromise = null;
-          }
-        }
       }
     }
   }
@@ -435,9 +415,6 @@ export class RoslynLspClient {
 
     this.sendNotification('initialized', {});
     this.initialized = true;
-    
-    // Wait for workspace to be ready
-    await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
   /**
@@ -473,47 +450,69 @@ export class RoslynLspClient {
   }
 
   /**
-   * Waits for the Roslyn project to fully load
+   * Waits for document to be loaded into the real project (not Canonical).
    * 
-   * This method:
-   * 1. Sends a hover request to trigger BuildHost initialization (non-blocking)
-   * 2. Waits for LSP log messages indicating project load completion
-   * 3. Only resolves when the project is truly ready
+   * Strategy:
+   * 1. Make a lightweight LSP request that returns project/document info
+   * 2. Check if the document is in a Canonical misc files project
+   * 3. If it is, wait and retry
+   * 4. If it isn't, the real project has loaded
    * 
-   * @param filePath - Path to a file in the project (used for test request)
-   * @param timeoutMs - Maximum time to wait (default: 240000ms = 4 minutes)
+   * Based on Roslyn source code:
+   * - Canonical projects have filePath containing "roslyn-canonical-misc"
+   * - Real projects return metadata URIs like "csharp:/metadata/..." for NuGet types
+   * 
+   * @param filePath - Path to the document
+   * @param maxRetries - Maximum number of retry attempts (default: 60)
+   * @param retryDelayMs - Delay between retries in ms (default: 1000)
    */
-  async waitForProjectLoad(filePath: string, timeoutMs: number = 240000): Promise<void> {
-    if (this.buildHostLoaded) {
-      return; // Already loaded
-    }
-
-    console.error('⏳ Triggering BuildHost initialization...');
+  async waitForRealProjectLoad(
+    filePath: string, 
+    maxRetries: number = 60,
+    retryDelayMs: number = 1000
+  ): Promise<void> {
+    const uri = `file://${filePath}`;
     
-    // Create promise that will be resolved by log message handler
-    const loadPromise = new Promise<void>((resolve, reject) => {
-      this.projectLoadPromise = { resolve, reject };
-      
-      // Set timeout
-      setTimeout(() => {
-        if (this.projectLoadPromise) {
-          this.projectLoadPromise = null;
-          reject(new Error(`Project load timeout after ${timeoutMs}ms. BuildHost did not complete.`));
+    console.error('⏳ Waiting for document to load into real project (not Canonical)...');
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        // Strategy: Get type definition for a known NuGet type
+        // If we're in Canonical project, this will fail or return nothing
+        // If we're in real project, this will succeed
+        
+        // Use line 18, character 25 which is "JsonConvert" from Newtonsoft.Json
+        const typeDefResult = await this.getTypeDefinition(filePath, 18, 25);
+        
+        if (typeDefResult && typeDefResult.length > 0) {
+          const resultUri = typeDefResult[0].uri;
+          
+          // Check if the result URI contains "roslyn-canonical-misc"
+          if (resultUri.includes('roslyn-canonical-misc')) {
+            console.error(`  [Attempt ${attempt + 1}/${maxRetries}] Still in Canonical project, retrying...`);
+          } else if (resultUri.startsWith('csharp:/metadata/')) {
+            // Got metadata URI for NuGet package - SUCCESS!
+            console.error(`✅ Document loaded into real project (attempt ${attempt + 1})`);
+            return;
+          } else {
+            console.error(`  [Attempt ${attempt + 1}/${maxRetries}] Got unexpected URI: ${resultUri}`);
+          }
+        } else {
+          console.error(`  [Attempt ${attempt + 1}/${maxRetries}] No type definition found, project still loading...`);
         }
-      }, timeoutMs);
-    });
+        
+      } catch (error) {
+        console.error(`  [Attempt ${attempt + 1}/${maxRetries}] Request failed: ${error}`);
+      }
+      
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+    }
     
-    // Trigger BuildHost by making a hover request
-    // DON'T await the response - just fire it to trigger the load
-    // The actual load completion is signaled via window/logMessage
-    this.getHover(filePath, 0, 0).catch(() => {
-      // Hover might timeout or fail, that's OK - we're just triggering the load
-    });
-    
-    // Wait for the project load to complete (signaled via log messages)
-    await loadPromise;
-    
-    console.error('✅ BuildHost loaded and project ready');
+    throw new Error(
+      `Timeout waiting for document to load into real project after ${maxRetries} attempts. ` +
+      `Document appears to be stuck in Canonical miscellaneous files project.`
+    );
   }
 
   /**
@@ -640,10 +639,8 @@ export class RoslynLspClient {
       await this.openDocument(filePath);
     }
 
-    // Wait for project load if first request
-    if (!this.buildHostLoaded) {
-      await this.waitForProjectLoad(filePath);
-    }
+    // Wait for document to be in real project (not Canonical)
+    await this.waitForRealProjectLoad(filePath);
 
     // Try type definition first
     const typeDefinitions = await this.getTypeDefinition(filePath, line, character);
