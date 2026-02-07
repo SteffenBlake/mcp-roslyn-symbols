@@ -3,15 +3,20 @@
  * Test: Wait for solution to load BEFORE opening document
  * 
  * ACTUAL RESULTS (2024-02-07):
- * - LSP initializes successfully with workspaceFolders set
- * - Waited 120 seconds after init - NO log messages about TestProject.csproj loading
- * - NO background solution loading occurred at all
- * - When document opened after 120s wait, still no TestProject loading
- * - Type definition for JsonConvert returns empty []
- * - BuildHost only starts when typeDefinition request is made
- * - When it does start, creates Canonical project, NOT TestProject
- * - CONCLUSION: workspaceFolders alone does NOT trigger solution auto-loading
- * - The solution is NOT being discovered/loaded automatically
+ * - WITHOUT --autoLoadProjects flag:
+ *   - LSP initializes successfully with workspaceFolders set
+ *   - Waited 120 seconds after init - NO log messages about TestProject.csproj loading
+ *   - NO background solution loading occurred at all
+ *   - When document opened after 120s wait, still no TestProject loading
+ *   - Type definition for JsonConvert returns empty []
+ *   - BuildHost only starts when typeDefinition request is made
+ *   - When it does start, creates Canonical project, NOT TestProject
+ *   - CONCLUSION: workspaceFolders alone does NOT trigger solution auto-loading
+ *   - The solution is NOT being discovered/loaded automatically
+ * 
+ * - WITH --autoLoadProjects flag:
+ *   - FIXED! TestProject.csproj loads automatically
+ *   - See src/diagnose-lsp.ts (compiled to dist/diagnose-lsp.js) for working version
  */
 
 import { RoslynLspClient } from './dist/lsp-client.js';

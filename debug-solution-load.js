@@ -3,14 +3,19 @@
  * Debug script to check if solution loading is working
  * 
  * ACTUAL RESULTS (2024-02-07):
- * - LSP initializes successfully
- * - Waited 30 seconds after init - NO solution loading messages appeared
- * - Opened document - still no solution loading
- * - Waited another 30 seconds - still nothing
- * - Type definition requests return empty arrays []
- * - BuildHost only starts when we make typeDefinition request
- * - When it does start, it creates Canonical project, NOT TestProject
- * - CONCLUSION: Solution is NOT auto-loading even with workspaceFolders set
+ * - WITHOUT --autoLoadProjects flag:
+ *   - LSP initializes successfully
+ *   - Waited 30 seconds after init - NO solution loading messages appeared
+ *   - Opened document - still no solution loading
+ *   - Waited another 30 seconds - still nothing
+ *   - Type definition requests return empty arrays []
+ *   - BuildHost only starts when we make typeDefinition request
+ *   - When it does start, it creates Canonical project, NOT TestProject
+ *   - CONCLUSION: Solution is NOT auto-loading even with workspaceFolders set
+ * 
+ * - WITH --autoLoadProjects flag:
+ *   - FIXED! TestProject.csproj loads automatically
+ *   - See src/diagnose-lsp.ts (compiled to dist/diagnose-lsp.js) for working version
  */
 
 import { RoslynLspClient } from './dist/lsp-client.js';
