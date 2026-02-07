@@ -427,9 +427,8 @@ export class RoslynLspClient {
     // Add solution path if found
     if (solutionPath) {
       initOptions.initializationOptions = {
-        solution: `file://${solutionPath}`,
+        solution: solutionPath,  // Use absolute path, not URI
       };
-      console.error(`LSP: Passing solution as URI: file://${solutionPath}`);
     }
     
     const result = await this.sendRequest('initialize', initOptions);
@@ -437,10 +436,8 @@ export class RoslynLspClient {
     this.sendNotification('initialized', {});
     this.initialized = true;
     
-    // Wait for solution to load - Roslyn needs time to scan and load solution projects
-    // We need to wait for a log message indicating the solution projects are loaded
-    console.error('LSP: Waiting for solution/workspace to load...');
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // Wait for workspace to be ready
+    await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
   /**
