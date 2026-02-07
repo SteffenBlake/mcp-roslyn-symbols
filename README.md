@@ -2,6 +2,25 @@
 
 An MCP (Model Context Protocol) server that provides symbol information from C# code using the Roslyn Language Server.
 
+## ⚠️ CRITICAL: Prerequisites for Agents
+
+**IF YOU ARE AN AI AGENT WORKING ON THIS PROJECT:**
+
+**STEP 1 - ALWAYS INSTALL THE LSP FIRST:**
+```bash
+dotnet tool install --global roslyn-language-server --prerelease
+```
+
+**DO NOT PROCEED WITHOUT COMPLETING STEP 1.** The tests will fail. The server will fail. Nothing works without the LSP.
+
+**STEP 2 - Verify installation:**
+```bash
+which roslyn-language-server
+roslyn-language-server --version
+```
+
+You should see version 5.5.0 or higher.
+
 ## Prerequisites
 
 Before using this MCP server, you must have the Roslyn Language Server installed:

@@ -79,6 +79,8 @@ export class RoslynLspClient {
   private initialized = false;
   private openDocuments = new Set<string>();
   private diagnosticsPromises = new Map<string, { resolve: () => void; reject: (error: any) => void }>();
+  private projectLoadPromise: { resolve: () => void; reject: (error: any) => void } | null = null;
+  private buildHostLoaded = false;
 
   /**
    * Starts the Roslyn Language Server
@@ -203,15 +205,24 @@ export class RoslynLspClient {
     if (message.method === 'window/logMessage') {
       const level = message.params?.type || 3;
       const text = message.params?.message || '';
+      
+      // Check for BuildHost completion FIRST
+      if (text.includes('Completed (re)load of all projects') || 
+          text.includes('Restore complete')) {
+        this.buildHostLoaded = true;
+        if (this.projectLoadPromise) {
+          this.projectLoadPromise.resolve();
+          this.projectLoadPromise = null;
+        }
+      }
+      
       // Log levels: 1=Error, 2=Warning, 3=Info, 4=Log
       if (level <= 2) {
         console.error(`LSP [${level === 1 ? 'ERROR' : 'WARN'}]: ${text}`);
       } else if (level === 3) {
-        // Log info messages for debugging
         console.error(`LSP [INFO]: ${text}`);
       }
     } else if (message.method === 'textDocument/publishDiagnostics') {
-      // This notification means the LSP has finished analyzing the document
       const uri = message.params?.uri || '';
       const diagnostics = message.params?.diagnostics || [];
       
@@ -224,14 +235,12 @@ export class RoslynLspClient {
         });
       }
       
-      // Resolve the promise for this document if one is waiting
       if (this.diagnosticsPromises.has(uri)) {
         const { resolve } = this.diagnosticsPromises.get(uri)!;
         this.diagnosticsPromises.delete(uri);
         resolve();
       }
     } else if (message.method === '$/progress') {
-      // Progress notification
       const token = message.params?.token;
       const value = message.params?.value;
       
@@ -239,6 +248,15 @@ export class RoslynLspClient {
         console.error(`LSP Progress [${token}]: ${value.title || 'Started'}`);
       } else if (value?.kind === 'end') {
         console.error(`LSP Progress [${token}]: Completed`);
+        
+        const title = value?.title || '';
+        if (title.includes('Loading') || title.includes('Project') || title.includes('Restore')) {
+          this.buildHostLoaded = true;
+          if (this.projectLoadPromise) {
+            this.projectLoadPromise.resolve();
+            this.projectLoadPromise = null;
+          }
+        }
       }
     }
   }
@@ -363,6 +381,9 @@ export class RoslynLspClient {
     const slnFile = files.find(f => f.endsWith('.sln') || f.endsWith('.slnx'));
     const solutionPath = slnFile ? `${workspaceRoot}/${slnFile}` : null;
     
+    console.error(`LSP: Initializing with workspace root: ${workspaceRoot}`);
+    console.error(`LSP: Solution file: ${solutionPath || 'NOT FOUND'}`);
+    
     const initOptions: any = {
       processId: process.pid,
       rootUri: `file://${workspaceRoot}`,
@@ -404,7 +425,11 @@ export class RoslynLspClient {
   }
 
   /**
-   * Opens a document in the LSP and waits for it to be analyzed
+   * Opens a document in the LSP
+   * 
+   * Note: We send didOpen but DO NOT wait for diagnostics, as Roslyn
+   * may not send them if there are no errors. Instead, the caller should
+   * call waitForProjectLoad() after opening to ensure the project is ready.
    */
   async openDocument(filePath: string): Promise<void> {
     const uri = `file://${filePath}`;
@@ -416,20 +441,6 @@ export class RoslynLspClient {
     
     const text = readFileSync(filePath, 'utf-8');
 
-    // Create a promise that will resolve when we get diagnostics for this document
-    const diagnosticsPromise = new Promise<void>((resolve, reject) => {
-      this.diagnosticsPromises.set(uri, { resolve, reject });
-      
-      // Set a longer timeout for Roslyn (can take 5-30 seconds on first load)
-      setTimeout(() => {
-        if (this.diagnosticsPromises.has(uri)) {
-          this.diagnosticsPromises.delete(uri);
-          console.error(`Warning: Diagnostics timeout for ${uri} after 60 seconds, continuing anyway`);
-          resolve();
-        }
-      }, 60000); // 60 second timeout for Roslyn to restore packages and build workspace
-    });
-
     this.sendNotification('textDocument/didOpen', {
       textDocument: {
         uri,
@@ -440,11 +451,52 @@ export class RoslynLspClient {
     });
     
     this.openDocuments.add(uri);
+    
+    // Give LSP a moment to process the didOpen notification
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
 
-    // Wait for the LSP to send diagnostics, indicating it has analyzed the document
-    console.error(`Waiting for diagnostics for ${uri}...`);
-    await diagnosticsPromise;
-    console.error(`✓ Diagnostics received for ${uri}`);
+  /**
+   * Waits for the Roslyn project to fully load
+   * 
+   * This method:
+   * 1. Makes a test request to trigger BuildHost initialization
+   * 2. Waits for LSP log messages indicating project load completion
+   * 3. Only resolves when the project is truly ready
+   * 
+   * @param filePath - Path to a file in the project (used for test request)
+   * @param timeoutMs - Maximum time to wait (default: 120000ms = 2 minutes)
+   */
+  async waitForProjectLoad(filePath: string, timeoutMs: number = 120000): Promise<void> {
+    if (this.buildHostLoaded) {
+      return; // Already loaded
+    }
+
+    console.error('⏳ Triggering BuildHost initialization...');
+    
+    // Create promise that will be resolved by log message handler
+    const loadPromise = new Promise<void>((resolve, reject) => {
+      this.projectLoadPromise = { resolve, reject };
+      
+      // Set timeout
+      setTimeout(() => {
+        if (this.projectLoadPromise) {
+          this.projectLoadPromise = null;
+          reject(new Error(`Project load timeout after ${timeoutMs}ms. BuildHost did not complete.`));
+        }
+      }, timeoutMs);
+    });
+    
+    // Trigger BuildHost by making a hover request
+    // This will cause Roslyn to restore packages and build the workspace
+    await this.getHover(filePath, 0, 0).catch(() => {
+      // First hover might fail, that's OK - it's just triggering the load
+    });
+    
+    // Wait for the project load to complete (signaled via log messages)
+    await loadPromise;
+    
+    console.error('✅ BuildHost loaded and project ready');
   }
 
   /**
