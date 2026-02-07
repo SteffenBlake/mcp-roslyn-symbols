@@ -48,13 +48,11 @@ async function test() {
     
     // Try different positions
     const positions = [
-      { line: 18, char: 23 },
-      { line: 18, char: 28 },
-      { line: 18, char: 35 },
-      { line: 18, char: 36 },
-      { line: 18, char: 48 }, // SerializeObject
-      { line: 15, char: 30 }, // JsonSerializerOptions on line 16
-      { line: 12, char: 12 }, // Console on line 13
+      { line: 12, char: 12, desc: 'Console (line 13)' },
+      { line: 12, char: 20, desc: 'WriteLine method (line 13)' },
+      { line: 15, char: 30, desc: 'JsonSerializerOptions type (line 16)' },
+      { line: 18, char: 23, desc: 'JsonConvert type (line 19)' },
+      { line: 18, char: 35, desc: 'SerializeObject method (line 19)' },
     ];
     
     for (const pos of positions) {
