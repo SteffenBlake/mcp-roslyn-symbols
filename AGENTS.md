@@ -1,25 +1,42 @@
 # Instructions for AI Agents
 
-**IF YOU ARE AN AI AGENT WORKING ON THIS PROJECT, READ THIS CAREFULLY:**
+```
+███████████████████████████████████████████████████████████████████
+█                                                                 █
+█  ⚠️⚠️⚠️  STOP! READ THIS BEFORE DOING ANYTHING ELSE  ⚠️⚠️⚠️  █
+█                                                                 █
+███████████████████████████████████████████████████████████████████
+```
 
-## Critical Prerequisites
+## 🚨 MANDATORY FIRST ACTION: Install Roslyn Language Server 🚨
 
-### STEP 1: Install Roslyn Language Server (REQUIRED)
-
-**DO NOT PROCEED WITHOUT THIS STEP.** Nothing will work without the LSP installed.
+**THE VERY FIRST COMMAND YOU RUN MUST BE:**
 
 ```bash
 dotnet tool install --global roslyn-language-server --prerelease
 ```
 
-### STEP 2: Verify Installation
+**THEN VERIFY IT:**
 
 ```bash
-which roslyn-language-server
-roslyn-language-server --version
+which roslyn-language-server && roslyn-language-server --version
 ```
 
-You should see version 5.5.0 or higher.
+Expected output: Version 5.5.0 or higher
+
+### Why This is Critical
+
+- ✅ Integration tests will FAIL without this
+- ✅ Integration tests will be SKIPPED without this  
+- ✅ You cannot verify your work without this
+- ✅ The entire purpose of this project depends on this
+
+### Automated Check
+
+The project now includes `scripts/check-lsp.sh` which automatically checks and installs if needed.
+This runs automatically before `npm test`.
+
+**BUT YOU SHOULD STILL INSTALL IT MANUALLY FIRST TO VERIFY IT WORKS.**
 
 ## Project Setup Requirements
 
