@@ -1,0 +1,14 @@
+<!--
+  WARNING TO AI AGENTS:
+  DO NOT manually create or edit this file!
+  This solution file MUST be created and maintained using the .NET CLI:
+  
+  To create: dotnet new sln --name TestProject
+  To add projects: dotnet sln add TestProject/TestProject.csproj
+  To remove projects: dotnet sln remove TestProject/TestProject.csproj
+  
+  Manual editing can break the solution structure and cause build failures.
+-->
+<Solution>
+  <Project Path="TestProject/TestProject.csproj" />
+</Solution>

@@ -2,36 +2,18 @@
 
 An MCP (Model Context Protocol) server that provides symbol information from C# code using the Roslyn Language Server.
 
-## ⚠️ CRITICAL: Prerequisites for Agents
-
-**IF YOU ARE AN AI AGENT WORKING ON THIS PROJECT:**
-
-**STEP 1 - ALWAYS INSTALL THE LSP FIRST:**
-```bash
-dotnet tool install --global roslyn-language-server --prerelease
-```
-
-**DO NOT PROCEED WITHOUT COMPLETING STEP 1.** The tests will fail. The server will fail. Nothing works without the LSP.
-
-**STEP 2 - Verify installation:**
-```bash
-which roslyn-language-server
-roslyn-language-server --version
-```
-
-You should see version 5.5.0 or higher.
-
 ## Prerequisites
 
-Before using this MCP server, you must have the Roslyn Language Server installed:
+Before using this MCP server, you must have:
 
-```bash
-dotnet tool install --global roslyn-language-server --prerelease
-```
+1. **Roslyn Language Server** (required):
+   ```bash
+   dotnet tool install --global roslyn-language-server --prerelease
+   ```
 
-You also need:
-- Node.js (v18 or higher)
-- .NET SDK (for the Roslyn Language Server and test project)
+2. **Node.js** v18 or higher
+
+3. **.NET SDK** 8.0 or higher (for the Roslyn Language Server and test project)
 
 ## Installation
 
@@ -46,7 +28,7 @@ This MCP server exposes a single powerful tool: `get_symbols_for`
 
 ### Tool: get_symbols_for
 
-Gets symbol information for a type at a specific cursor position in a C# file. This retrieves all public methods, properties, fields, events, etc. from the type, even if it's from a NuGet package.
+Gets symbol information for a type at a specific cursor position in a C# file. This retrieves all public methods, properties, fields, events, etc. from the type, even if it's from a NuGet package (through decompilation).
 
 #### Parameters
 
@@ -87,7 +69,7 @@ The server uses stdio for communication and follows the Model Context Protocol s
 
 ## Testing
 
-The project includes a test suite that validates functionality:
+The project includes a comprehensive test suite:
 
 ```bash
 npm test
@@ -95,7 +77,7 @@ npm test
 
 Test cases include:
 1. Getting symbols for core .NET types (e.g., `int`)
-2. Getting symbols for framework types (e.g., `JsonSerializer`)
+2. Getting symbols for framework types (e.g., `JsonSerializerOptions`)
 3. Getting symbols for 3rd party library types (e.g., `JsonConvert` from Newtonsoft.Json)
 
 ## Development
@@ -109,12 +91,10 @@ Test cases include:
 │   ├── lsp-client.ts     # Roslyn LSP client implementation
 │   └── roslyn-check.ts   # Checks for Roslyn installation
 ├── tests/
-│   └── lsp-client.test.ts # Test suite
+│   └── *.test.ts         # Test suite
 ├── test-project/
-│   ├── Program.cs         # Test C# program
-│   ├── TestProject.csproj # Project file
-│   └── TestProject.slnx   # Solution file
-└── dist/                  # Compiled JavaScript output
+│   └── TestProject/      # Test C# project
+└── dist/                 # Compiled JavaScript output
 ```
 
 ### Building
@@ -138,10 +118,15 @@ npm run test:watch    # Run tests in watch mode
    - Starts the Roslyn Language Server (if not already started)
    - Opens the requested document
    - Gets the type definition at the specified cursor position
-   - Retrieves all symbols from the type definition
+   - Retrieves all symbols from the type definition (including decompiled sources)
    - Filters and formats the symbols based on the provided options
    - Returns the symbol information
+
+## For Contributors
+
+If you're an AI agent or developer working on this project, please see [AGENTS.md](AGENTS.md) for detailed development guidelines and requirements.
 
 ## License
 
 MIT
+
