@@ -353,14 +353,14 @@ export class RoslynLspClient {
       this.pendingRequests.set(id, { resolve, reject });
       this.process.stdin.write(header + content);
 
-      // Timeout after 30 seconds
+      // Timeout after 120 seconds (BuildHost reload can take 60-90s)
       setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
-          console.error(`Request ${id} (${method}) timed out`);
-          reject(new Error('Request timeout'));
+          console.error(`Request ${id} (${method}) timed out after 120s`);
+          reject(new Error(`Request timeout after 120s: ${method}`));
         }
-      }, 30000);
+      }, 120000);
     });
   }
 
@@ -471,14 +471,14 @@ export class RoslynLspClient {
    * Waits for the Roslyn project to fully load
    * 
    * This method:
-   * 1. Makes a test request to trigger BuildHost initialization
+   * 1. Sends a hover request to trigger BuildHost initialization (non-blocking)
    * 2. Waits for LSP log messages indicating project load completion
    * 3. Only resolves when the project is truly ready
    * 
    * @param filePath - Path to a file in the project (used for test request)
-   * @param timeoutMs - Maximum time to wait (default: 120000ms = 2 minutes)
+   * @param timeoutMs - Maximum time to wait (default: 240000ms = 4 minutes)
    */
-  async waitForProjectLoad(filePath: string, timeoutMs: number = 120000): Promise<void> {
+  async waitForProjectLoad(filePath: string, timeoutMs: number = 240000): Promise<void> {
     if (this.buildHostLoaded) {
       return; // Already loaded
     }
@@ -499,9 +499,10 @@ export class RoslynLspClient {
     });
     
     // Trigger BuildHost by making a hover request
-    // This will cause Roslyn to restore packages and build the workspace
-    await this.getHover(filePath, 0, 0).catch(() => {
-      // First hover might fail, that's OK - it's just triggering the load
+    // DON'T await the response - just fire it to trigger the load
+    // The actual load completion is signaled via window/logMessage
+    this.getHover(filePath, 0, 0).catch(() => {
+      // Hover might timeout or fail, that's OK - we're just triggering the load
     });
     
     // Wait for the project load to complete (signaled via log messages)
