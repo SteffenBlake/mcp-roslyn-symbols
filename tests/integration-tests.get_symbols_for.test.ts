@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { RoslynLspClient } from '../src/lsp-client.js';
+import { RoslynLspClient, FormattedSymbol } from '../src/lsp-client.js';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import { checkRoslynLanguageServer } from '../src/roslyn-check.js';
@@ -85,7 +85,7 @@ describe('Integration Tests - getSymbolsFor()', () => {
       expect(result.symbols.length).toBeGreaterThan(0);
 
       // int type should have methods like ToString, GetHashCode, Equals
-      const symbolNames = result.symbols.map((s: any) => s.name);
+      const symbolNames = result.symbols.map((s: FormattedSymbol) => s.name);
       const hasExpectedMethods = symbolNames.some((name: string) => 
         name.includes('ToString') || name.includes('GetHashCode') || name.includes('Equals')
       );
@@ -154,7 +154,7 @@ describe('Integration Tests - getSymbolsFor()', () => {
       expect(result.symbols.length).toBeGreaterThan(0);
 
       // JsonConvert should have SerializeObject and DeserializeObject methods
-      const symbolNames = result.symbols.map((s: any) => s.name);
+      const symbolNames = result.symbols.map((s: FormattedSymbol) => s.name);
       const hasExpectedMethods = symbolNames.some((name: string) => 
         name.includes('SerializeObject') || name.includes('DeserializeObject')
       );

@@ -37,6 +37,17 @@ export interface DocumentSymbol {
   children?: DocumentSymbol[];
 }
 
+export interface FormattedSymbol {
+  name: string;
+  kind: string;
+  detail?: string;
+  range?: {
+    start: Position;
+    end: Position;
+  };
+  signature?: string;
+}
+
 export type SymbolType = 'Property' | 'Field' | 'Event' | 'Method' | 'Class' | 'Interface' | 'Enum';
 
 const SymbolKindMap: Record<number, string> = {
@@ -608,14 +619,14 @@ export class RoslynLspClient {
    * @param line - Line number (0-indexed)
    * @param character - Character position (0-indexed)
    * @param options - Optional filtering and formatting options
-   * @returns Object with symbols array and metadata
+   * @returns Object with symbols array and source URI
    */
   async getSymbolsFor(
     filePath: string, 
     line: number, 
     character: number, 
     options?: { symbolType?: SymbolType; signaturesOnly?: boolean }
-  ): Promise<{ symbols: any[]; typeInfo?: any; sourceUri?: string }> {
+  ): Promise<{ symbols: FormattedSymbol[]; sourceUri?: string }> {
     const uri = `file://${filePath}`;
 
     // Ensure document is opened
@@ -718,9 +729,9 @@ export function filterSymbolsByType(symbols: DocumentSymbol[], symbolType: Symbo
 /**
  * Formats symbols for output
  */
-export function formatSymbols(symbols: DocumentSymbol[], signaturesOnly: boolean): any[] {
+export function formatSymbols(symbols: DocumentSymbol[], signaturesOnly: boolean): FormattedSymbol[] {
   return symbols.map(symbol => {
-    const result: any = {
+    const result: FormattedSymbol = {
       name: symbol.name,
       kind: symbolKindToString(symbol.kind),
     };
