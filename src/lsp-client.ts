@@ -754,7 +754,7 @@ function flattenSymbols(symbols: DocumentSymbol[]): DocumentSymbol[] {
   const flattened: DocumentSymbol[] = [];
   function traverse(symbol: DocumentSymbol) {
     flattened.push(symbol);
-    if (symbol.children && symbol.children.length > 0) {
+    if (symbol.children?.length) {
       symbol.children.forEach(traverse);
     }
   }
