@@ -1,3 +1,8 @@
+<!-- 
+  WARNING: .slnx files ARE fully supported by Roslyn LSP and have been for a long time.
+  DO NOT waste time converting this to .sln format thinking it will help.
+  The file format is NOT the issue with solution/project loading.
+-->
 <Solution>
   <Project Path="TestProject/TestProject.csproj" />
 </Solution>

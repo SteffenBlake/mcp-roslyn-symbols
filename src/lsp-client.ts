@@ -50,6 +50,8 @@ export interface FormattedSymbol {
 
 export type SymbolType = 'Property' | 'Field' | 'Event' | 'Method' | 'Class' | 'Interface' | 'Enum';
 
+export type VerbosityLevel = 'silent' | 'normal' | 'verbose';
+
 const SymbolKindMap: Record<number, string> = {
   1: 'File',
   2: 'Module',
@@ -90,7 +92,28 @@ export class RoslynLspClient {
   private initialized = false;
   private openDocuments = new Set<string>();
   private diagnosticsPromises = new Map<string, { resolve: () => void; reject: (error: any) => void }>();
+  private verbosity: VerbosityLevel = 'normal';
 
+  /**
+   * Creates a new Roslyn LSP client
+   * @param verbosity - Logging verbosity level ('silent' | 'normal' | 'verbose')
+   */
+  constructor(verbosity: VerbosityLevel = 'normal') {
+    this.verbosity = verbosity;
+  }
+
+  /**
+   * Internal logging method that respects verbosity level
+   */
+  private log(message: string, level: 'info' | 'verbose' = 'info'): void {
+    if (this.verbosity === 'silent') {
+      return;
+    }
+    if (level === 'verbose' && this.verbosity !== 'verbose') {
+      return;
+    }
+    console.error(message);
+  }
 
   /**
    * Starts the Roslyn Language Server
@@ -120,9 +143,9 @@ export class RoslynLspClient {
 
       this.process.stderr?.on('data', (data: Buffer) => {
         const message = data.toString();
-        // Only log non-empty and non-trace messages
+        // Only log non-empty and non-trace messages in verbose mode
         if (message.trim() && !message.includes('[trace]')) {
-          console.error('LSP stderr:', message);
+          this.log(`LSP stderr: ${message}`, 'verbose');
         }
       });
 
@@ -218,25 +241,25 @@ export class RoslynLspClient {
       
       // Log levels: 1=Error, 2=Warning, 3=Info, 4=Log
       if (level <= 2) {
-        console.error(`LSP [${level === 1 ? 'ERROR' : 'WARN'}]: ${text}`);
+        this.log(`LSP [${level === 1 ? 'ERROR' : 'WARN'}]: ${text}`, 'info');
       } else if (level === 3) {
-        console.error(`LSP [INFO]: ${text}`);
+        this.log(`LSP [INFO]: ${text}`, 'verbose');
       }
       
       // Log if we see TestProject being loaded (not just Canonical)
       if (text.includes('TestProject.csproj') || text.includes('TestProject')) {
-        console.error(`🎯 IMPORTANT: TestProject mentioned: ${text}`);
+        this.log(`🎯 IMPORTANT: TestProject mentioned: ${text}`, 'verbose');
       }
     } else if (message.method === 'textDocument/publishDiagnostics') {
       const uri = message.params?.uri || '';
       const diagnostics = message.params?.diagnostics || [];
       
-      console.error(`LSP: Received diagnostics for ${uri} (${diagnostics.length} items)`);
+      this.log(`LSP: Received diagnostics for ${uri} (${diagnostics.length} items)`, 'verbose');
       
       if (diagnostics.length > 0) {
         diagnostics.forEach((d: any) => {
           const severity = d.severity === 1 ? 'ERROR' : d.severity === 2 ? 'WARNING' : d.severity === 3 ? 'INFO' : 'HINT';
-          console.error(`  [${severity}] Line ${d.range.start.line + 1}: ${d.message}`);
+          this.log(`  [${severity}] Line ${d.range.start.line + 1}: ${d.message}`, 'verbose');
         });
       }
       
@@ -250,9 +273,9 @@ export class RoslynLspClient {
       const value = message.params?.value;
       
       if (value?.kind === 'begin') {
-        console.error(`LSP Progress [${token}]: ${value.title || 'Started'}`);
+        this.log(`LSP Progress [${token}]: ${value.title || 'Started'}`, 'verbose');
       } else if (value?.kind === 'end') {
-        console.error(`LSP Progress [${token}]: Completed`);
+        this.log(`LSP Progress [${token}]: Completed`, 'verbose');
       }
     }
   }
@@ -342,7 +365,7 @@ export class RoslynLspClient {
       setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
-          console.error(`Request ${id} (${method}) timed out after 120s`);
+          this.log(`Request ${id} (${method}) timed out after 120s`, 'verbose');
           reject(new Error(`Request timeout after 120s: ${method}`));
         }
       }, 120000);
@@ -371,18 +394,17 @@ export class RoslynLspClient {
    * Initializes the LSP
    */
   private async initialize(workspaceRoot: string): Promise<void> {
-    // Try to find the solution file
-    const fs = await import('fs');
-    const files = fs.readdirSync(workspaceRoot);
-    const slnFile = files.find(f => f.endsWith('.sln') || f.endsWith('.slnx'));
-    const solutionPath = slnFile ? `${workspaceRoot}/${slnFile}` : null;
-    
-    console.error(`LSP: Initializing with workspace root: ${workspaceRoot}`);
-    console.error(`LSP: Solution file: ${solutionPath || 'NOT FOUND'}`);
+    this.log(`LSP: Initializing with workspace root: ${workspaceRoot}`, 'verbose');
     
     const initOptions: any = {
       processId: process.pid,
       rootUri: `file://${workspaceRoot}`,
+      workspaceFolders: [
+        {
+          uri: `file://${workspaceRoot}`,
+          name: path.basename(workspaceRoot),
+        },
+      ],
       capabilities: {
         textDocument: {
           hover: {
@@ -403,13 +425,6 @@ export class RoslynLspClient {
         },
       },
     };
-    
-    // Add solution path if found
-    if (solutionPath) {
-      initOptions.initializationOptions = {
-        solution: solutionPath,  // Use absolute path, not URI
-      };
-    }
     
     const result = await this.sendRequest('initialize', initOptions);
 
@@ -453,10 +468,12 @@ export class RoslynLspClient {
    * Waits for document to be loaded into the real project (not Canonical).
    * 
    * Strategy:
-   * 1. Make a lightweight LSP request that returns project/document info
-   * 2. Check if the document is in a Canonical misc files project
-   * 3. If it is, wait and retry
-   * 4. If it isn't, the real project has loaded
+   * 1. Poll using typeDefinition on a known NuGet type (JsonConvert)
+   * 2. Check the returned URI:
+   *    - Contains "roslyn-canonical-misc" → still in Canonical, retry
+   *    - Starts with "csharp:/metadata/" → in real project, success!
+   *    - Empty/null → still loading, retry
+   * 3. Retry with delay until success or timeout
    * 
    * Based on Roslyn source code:
    * - Canonical projects have filePath containing "roslyn-canonical-misc"
@@ -471,42 +488,40 @@ export class RoslynLspClient {
     maxRetries: number = 60,
     retryDelayMs: number = 1000
   ): Promise<void> {
-    const uri = `file://${filePath}`;
+    this.log('⏳ Waiting for document to load into real project (not Canonical)...', 'info');
     
-    console.error('⏳ Waiting for document to load into real project (not Canonical)...');
-    
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        // Strategy: Get type definition for a known NuGet type
-        // If we're in Canonical project, this will fail or return nothing
-        // If we're in real project, this will succeed
-        
-        // Use line 18, character 25 which is "JsonConvert" from Newtonsoft.Json
-        const typeDefResult = await this.getTypeDefinition(filePath, 18, 25);
+        // Use line 18 (0-indexed), character 19 which points to JsonConvert from Newtonsoft.Json
+        // This is a NuGet type that won't exist in Canonical but will in real project
+        const typeDefResult = await this.getTypeDefinition(filePath, 18, 19);
         
         if (typeDefResult && typeDefResult.length > 0) {
           const resultUri = typeDefResult[0].uri;
           
           // Check if the result URI contains "roslyn-canonical-misc"
           if (resultUri.includes('roslyn-canonical-misc')) {
-            console.error(`  [Attempt ${attempt + 1}/${maxRetries}] Still in Canonical project, retrying...`);
+            this.log(`  [Attempt ${attempt}/${maxRetries}] Still in Canonical project, retrying...`, 'verbose');
           } else if (resultUri.startsWith('csharp:/metadata/')) {
             // Got metadata URI for NuGet package - SUCCESS!
-            console.error(`✅ Document loaded into real project (attempt ${attempt + 1})`);
+            this.log(`✅ Document loaded into real project (attempt ${attempt})`, 'info');
+            this.log(`   Result URI: ${resultUri}`, 'verbose');
             return;
           } else {
-            console.error(`  [Attempt ${attempt + 1}/${maxRetries}] Got unexpected URI: ${resultUri}`);
+            this.log(`  [Attempt ${attempt}/${maxRetries}] Got unexpected URI: ${resultUri}`, 'verbose');
           }
         } else {
-          console.error(`  [Attempt ${attempt + 1}/${maxRetries}] No type definition found, project still loading...`);
+          this.log(`  [Attempt ${attempt}/${maxRetries}] No type definition found, project still loading...`, 'verbose');
         }
         
       } catch (error) {
-        console.error(`  [Attempt ${attempt + 1}/${maxRetries}] Request failed: ${error}`);
+        this.log(`  [Attempt ${attempt}/${maxRetries}] Request failed: ${error}`, 'verbose');
       }
       
       // Wait before retrying
-      await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+      }
     }
     
     throw new Error(

@@ -18,7 +18,7 @@ console.log('📄 File:', programFile);
 console.log('─'.repeat(80));
 
 async function diagnose() {
-  const client = new RoslynLspClient();
+  const client = new RoslynLspClient('verbose');  // Use verbose mode for diagnostics
   
   try {
     console.log('\n⏱️  [0s] Starting LSP...');
@@ -31,11 +31,8 @@ async function diagnose() {
     await client.openDocument(programFile);
     console.log(`✅ [${((Date.now() - startTime) / 1000).toFixed(1)}s] Document opened`);
     
-    console.log(`\n⏱️  [${((Date.now() - startTime) / 1000).toFixed(1)}s] Waiting for project load...`);
-    await client.waitForProjectLoad(programFile);
-    console.log(`✅ [${((Date.now() - startTime) / 1000).toFixed(1)}s] Project load complete`);
-    
     // Now try to get symbols for JsonConvert (the critical NuGet test)
+    // getSymbolsFor will handle waiting for real project load internally
     console.log(`\n⏱️  [${((Date.now() - startTime) / 1000).toFixed(1)}s] Testing JsonConvert (NuGet) symbol retrieval...`);
     console.log('   Position: Line 18, Character 19 (JsonConvert.SerializeObject)');
     
