@@ -105,7 +105,11 @@ export class RoslynLspClient {
       });
 
       this.process.stderr?.on('data', (data: Buffer) => {
-        console.error('LSP stderr:', data.toString());
+        const message = data.toString();
+        // Only log non-empty and non-trace messages
+        if (message.trim() && !message.includes('[trace]')) {
+          console.error('LSP stderr:', message);
+        }
       });
 
       this.process.on('error', (error) => {
@@ -165,6 +169,19 @@ export class RoslynLspClient {
    * Handles an LSP message
    */
   private handleMessage(message: any): void {
+    // Handle server requests (like workspace/configuration)
+    if (message.method && message.id !== undefined) {
+      this.handleServerRequest(message);
+      return;
+    }
+    
+    // Handle notifications
+    if (message.method && message.id === undefined) {
+      this.handleNotification(message);
+      return;
+    }
+    
+    // Handle responses to our requests
     if (message.id !== undefined && this.pendingRequests.has(message.id)) {
       const { resolve, reject } = this.pendingRequests.get(message.id)!;
       this.pendingRequests.delete(message.id);
@@ -174,6 +191,57 @@ export class RoslynLspClient {
       } else {
         resolve(message.result);
       }
+    }
+  }
+
+  /**
+   * Handles notifications from the server
+   */
+  private handleNotification(message: any): void {
+    if (message.method === 'window/logMessage') {
+      const level = message.params?.type || 3;
+      const text = message.params?.message || '';
+      // Log levels: 1=Error, 2=Warning, 3=Info, 4=Log
+      if (level <= 2) {
+        console.error(`LSP [${level === 1 ? 'ERROR' : 'WARN'}]: ${text}`);
+      }
+    }
+  }
+
+  /**
+   * Handles requests from the server
+   */
+  private handleServerRequest(message: any): void {
+    if (message.method === 'workspace/configuration') {
+      // Respond with empty configuration for each item
+      const items = message.params?.items || [];
+      const config = items.map(() => ({}));
+      
+      this.sendResponse(message.id, config);
+    } else if (message.method === 'client/registerCapability') {
+      // Acknowledge capability registration
+      this.sendResponse(message.id, null);
+    } else {
+      // Send empty response for unknown requests
+      this.sendResponse(message.id, null);
+    }
+  }
+
+  /**
+   * Sends a response to a server request
+   */
+  private sendResponse(id: number, result: any): void {
+    const message = {
+      jsonrpc: '2.0',
+      id,
+      result,
+    };
+
+    const content = JSON.stringify(message);
+    const header = `Content-Length: ${Buffer.byteLength(content)}\r\n\r\n`;
+    
+    if (this.process?.stdin) {
+      this.process.stdin.write(header + content);
     }
   }
 
@@ -205,6 +273,7 @@ export class RoslynLspClient {
       setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
+          console.error(`Request ${id} (${method}) timed out`);
           reject(new Error('Request timeout'));
         }
       }, 30000);
@@ -233,7 +302,13 @@ export class RoslynLspClient {
    * Initializes the LSP
    */
   private async initialize(workspaceRoot: string): Promise<void> {
-    await this.sendRequest('initialize', {
+    // Try to find the solution file
+    const fs = await import('fs');
+    const files = fs.readdirSync(workspaceRoot);
+    const slnFile = files.find(f => f.endsWith('.sln') || f.endsWith('.slnx'));
+    const solutionPath = slnFile ? `${workspaceRoot}/${slnFile}` : null;
+    
+    const initOptions: any = {
       processId: process.pid,
       rootUri: `file://${workspaceRoot}`,
       capabilities: {
@@ -251,11 +326,26 @@ export class RoslynLspClient {
             hierarchicalDocumentSymbolSupport: true,
           },
         },
+        workspace: {
+          configuration: true,
+        },
       },
-    });
+    };
+    
+    // Add solution path if found
+    if (solutionPath) {
+      initOptions.initializationOptions = {
+        solution: solutionPath,
+      };
+    }
+    
+    const result = await this.sendRequest('initialize', initOptions);
 
     this.sendNotification('initialized', {});
     this.initialized = true;
+    
+    // Give the LSP more time to fully initialize and load the solution
+    await new Promise(resolve => setTimeout(resolve, 3000));
   }
 
   /**
@@ -333,6 +423,17 @@ export class RoslynLspClient {
     });
 
     return result;
+  }
+
+  /**
+   * Searches for symbols in the workspace
+   */
+  async workspaceSymbol(query: string): Promise<any[]> {
+    const result = await this.sendRequest('workspace/symbol', {
+      query,
+    });
+
+    return result || [];
   }
 }
 

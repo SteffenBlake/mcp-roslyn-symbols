@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "postbuild": "chmod +x dist/index.js",
     "prepare": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest"
