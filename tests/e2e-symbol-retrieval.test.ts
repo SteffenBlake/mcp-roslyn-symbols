@@ -245,7 +245,7 @@ async function waitForProjectLoad(client: RoslynLspClient): Promise<void> {
  * @param filePath - Path to the source file
  * @param line - Line number (0-indexed)
  * @param character - Character position (0-indexed)
- * @returns Array of document symbols
+ * @returns Array of document symbols (flattened, including children)
  */
 async function retrieveSymbolsAtPosition(
   client: RoslynLspClient,
@@ -265,9 +265,30 @@ async function retrieveSymbolsAtPosition(
     }
     
     const defUri = definitions[0].uri;
-    return await client.getDocumentSymbolsByUri(defUri);
+    const symbols = await client.getDocumentSymbolsByUri(defUri);
+    return flattenSymbols(symbols);
   }
   
   const typeDefUri = typeDefinitions[0].uri;
-  return await client.getDocumentSymbolsByUri(typeDefUri);
+  const symbols = await client.getDocumentSymbolsByUri(typeDefUri);
+  return flattenSymbols(symbols);
+}
+
+/**
+ * Flattens hierarchical document symbols into a flat array
+ * This is needed because Roslyn returns symbols in a tree structure
+ * (namespace > class > members), but we want all members.
+ */
+function flattenSymbols(symbols: any[]): any[] {
+  const flattened: any[] = [];
+  
+  function traverse(symbol: any) {
+    flattened.push(symbol);
+    if (symbol.children && symbol.children.length > 0) {
+      symbol.children.forEach(traverse);
+    }
+  }
+  
+  symbols.forEach(traverse);
+  return flattened;
 }
