@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 const testProjectPath = path.resolve(process.cwd(), 'test-project');
-const programPath = path.join(testProjectPath, 'Program.cs');
+const programPath = path.join(testProjectPath, 'TestProject', 'Program.cs');
 
 async function test() {
   const client = new RoslynLspClient();
