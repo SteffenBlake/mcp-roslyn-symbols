@@ -2,17 +2,12 @@
   "name": "mcp-roslyn-symbols",
   "version": "1.0.0",
   "description": "MCP server for Roslyn Language Server symbol information",
-  "main": "dist/index.js",
+  "main": "src/index.js",
   "type": "module",
   "bin": {
-    "mcp-roslyn-symbols": "./dist/index.js"
+    "mcp-roslyn-symbols": "./src/index.js"
   },
   "scripts": {
-    "build": "npm run build:src && npm run build:utilities",
-    "build:src": "tsc",
-    "build:utilities": "tsc -p tsconfig.utilities.json",
-    "postbuild": "chmod +x dist/index.js",
-    "prepare": "npm run build",
     "pretest": "bash scripts/check-lsp.sh",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -38,9 +33,6 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^25.2.1",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   }
 }
