@@ -473,27 +473,28 @@ export class RoslynLspClient {
    * Waits for document to be loaded into the real project (not Canonical).
    * 
    * Strategy:
-   * 1. Poll using typeDefinition on the requested position
+   * 1. Poll using typeDefinition on a known NuGet type (JsonConvert at line 18)
    * 2. Check the returned URI:
    *    - Contains "roslyn-canonical-misc" → still in Canonical, retry
    *    - Starts with "csharp:/metadata/" or contains "/MetadataAsSource/" → in real project, success!
    *    - Empty/null → still loading, retry
    * 3. Retry with delay until success or timeout
    * 
+   * This method always checks line 18, char 19 (JsonConvert from Newtonsoft.Json)
+   * regardless of what symbol the user is querying. This is because JsonConvert
+   * is a NuGet package type that only exists in the real project, making it a
+   * reliable indicator that the real project (not Canonical) has loaded.
+   * 
    * Based on Roslyn source code:
    * - Canonical projects have filePath containing "roslyn-canonical-misc"
-   * - Real projects return metadata URIs for framework/NuGet types
+   * - Real projects return metadata URIs for NuGet types
    * 
    * @param filePath - Path to the document
-   * @param line - Line number to check (0-indexed)
-   * @param character - Character position to check (0-indexed)
    * @param maxRetries - Maximum number of retry attempts (default: 60)
    * @param retryDelayMs - Delay between retries in ms (default: 1000)
    */
   async waitForRealProjectLoad(
     filePath: string,
-    line: number,
-    character: number,
     maxRetries: number = 60,
     retryDelayMs: number = 1000
   ): Promise<void> {
@@ -501,7 +502,9 @@ export class RoslynLspClient {
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const typeDefResult = await this.getTypeDefinition(filePath, line, character);
+        // Always check line 18, char 19 which is JsonConvert from Newtonsoft.Json
+        // This is a NuGet type that only exists in the real project, not in Canonical
+        const typeDefResult = await this.getTypeDefinition(filePath, 18, 19);
         
         if (typeDefResult && typeDefResult.length > 0) {
           const resultUri = typeDefResult[0].uri;
@@ -674,7 +677,8 @@ export class RoslynLspClient {
     }
 
     // Wait for document to be in real project (not Canonical)
-    await this.waitForRealProjectLoad(filePath, line, character);
+    // This always checks a known NuGet type (JsonConvert) to reliably detect real project load
+    await this.waitForRealProjectLoad(filePath);
 
     // Try type definition first
     const typeDefinitions = await this.getTypeDefinition(filePath, line, character);
