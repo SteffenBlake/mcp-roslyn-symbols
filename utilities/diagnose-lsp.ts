@@ -1,10 +1,42 @@
 #!/usr/bin/env node
 /**
- * Diagnostic script to observe the COMPLETE LSP loading sequence
- * This will help us understand when Roslyn is TRULY ready for NuGet symbol queries
+ * LSP Diagnostic Utility
+ * 
+ * This utility helps diagnose and debug Roslyn Language Server Protocol (LSP) issues
+ * by providing verbose logging of the complete LSP initialization and symbol retrieval process.
+ * 
+ * ## Purpose
+ * Use this tool to:
+ * - Debug LSP connection and initialization issues
+ * - Verify that projects are loading correctly (not stuck in Canonical misc files project)
+ * - Test symbol resolution for both BCL types and NuGet package types
+ * - Understand timing issues with project loading and symbol availability
+ * - Troubleshoot why certain symbols aren't being resolved
+ * 
+ * ## How to Use
+ * 1. Build the project: `npm run build`
+ * 2. Run the diagnostic: `node dist/utilities/diagnose-lsp.js`
+ * 
+ * The script will:
+ * - Start the LSP server with verbose logging enabled
+ * - Load the test project and wait for the real project (not Canonical) to initialize
+ * - Query symbols for a NuGet package type (JsonConvert from Newtonsoft.Json)
+ * - Display detailed timing and result information
+ * 
+ * ## Output
+ * - Verbose LSP messages showing initialization sequence
+ * - Project loading status and timing
+ * - Symbol retrieval results with counts and types
+ * - Total execution time
+ * 
+ * ## Common Issues This Helps Debug
+ * - "Canonical.cs" project issues (document stuck in misc files project)
+ * - NuGet package symbols not resolving
+ * - LSP initialization timeouts
+ * - Project loading delays
  */
 
-import { RoslynLspClient } from './lsp-client.js';
+import { RoslynLspClient } from '../src/lsp-client.js';
 import * as path from 'path';
 
 const testProjectRoot = path.join(process.cwd(), 'test-project'); // Workspace root (contains .slnx)

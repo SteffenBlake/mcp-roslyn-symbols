@@ -120,6 +120,8 @@ The Roslyn Language Server communicates via JSON-RPC over stdio:
 │   ├── index.ts          # MCP server main entry
 │   ├── lsp-client.ts     # Roslyn LSP client
 │   └── roslyn-check.ts   # Installation checker
+├── utilities/
+│   └── diagnose-lsp.ts   # LSP diagnostic tool (verbose debugging)
 ├── tests/
 │   ├── e2e-symbol-retrieval.test.ts  # Main E2E tests
 │   └── *.test.ts         # Unit tests
@@ -132,19 +134,29 @@ The Roslyn Language Server communicates via JSON-RPC over stdio:
 └── README.md             # User documentation (for humans)
 ```
 
+## Utilities Directory
+
+The `utilities/` directory contains diagnostic and testing tools that help debug and verify LSP functionality:
+
+- **diagnose-lsp.ts**: Verbose LSP diagnostic tool for debugging project loading and symbol resolution
+- All future "test stuff out" scripts should go in the `utilities/` subdirectory
+- These are NOT production code - they are development/debugging tools
+- Run utilities from compiled output: `node dist/utilities/<script-name>.js`
+
 ## What NOT to Do
 
-❌ Don't create manual test scripts (manual-test.ts, test-decompilation.ts, etc.)
+❌ Don't create manual test scripts outside the `utilities/` directory
 ❌ Don't manually create .sln or .slnx files
 ❌ Don't manually create .csproj files
 ❌ Don't use arbitrary timeouts instead of callbacks
 ❌ Don't ignore LSP installation requirements
-❌ Don't commit debugging/temporary files
+❌ Don't commit debugging/temporary files to the root directory
 
 ## What TO Do
 
 ✅ Use dotnet CLI for all .NET project operations
 ✅ Use LSP callbacks for synchronization
 ✅ Follow existing test patterns
+✅ Place diagnostic/testing scripts in `utilities/` directory
 ✅ Clean up after debugging
 ✅ Document significant changes
