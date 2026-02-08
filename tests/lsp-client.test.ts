@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { checkRoslynLanguageServer } from '../src/roslyn-check.js';
-import { RoslynLspClient, filterSymbolsByType, formatSymbols, symbolKindToString, DocumentSymbol } from '../src/lsp-client.js';
+import {
+  RoslynLspClient,
+  filterSymbolsByType,
+  formatSymbols,
+  symbolKindToString,
+  DocumentSymbol,
+} from '../src/lsp-client.js';
 import * as path from 'path';
 import { execSync } from 'child_process';
 

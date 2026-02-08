@@ -259,7 +259,11 @@ export class RoslynLspClient {
       
       if (diagnostics.length > 0) {
         diagnostics.forEach((d: any) => {
-          const severity = d.severity === 1 ? 'ERROR' : d.severity === 2 ? 'WARNING' : d.severity === 3 ? 'INFO' : 'HINT';
+          let severity = 'HINT';
+          if (d.severity === 1) severity = 'ERROR';
+          else if (d.severity === 2) severity = 'WARNING';
+          else if (d.severity === 3) severity = 'INFO';
+          
           this.log(`  [${severity}] Line ${d.range.start.line + 1}: ${d.message}`, 'verbose');
         });
       }
@@ -469,23 +473,27 @@ export class RoslynLspClient {
    * Waits for document to be loaded into the real project (not Canonical).
    * 
    * Strategy:
-   * 1. Poll using typeDefinition on a known NuGet type (JsonConvert)
+   * 1. Poll using typeDefinition on the requested position
    * 2. Check the returned URI:
    *    - Contains "roslyn-canonical-misc" → still in Canonical, retry
-   *    - Starts with "csharp:/metadata/" → in real project, success!
+   *    - Starts with "csharp:/metadata/" or contains "/MetadataAsSource/" → in real project, success!
    *    - Empty/null → still loading, retry
    * 3. Retry with delay until success or timeout
    * 
    * Based on Roslyn source code:
    * - Canonical projects have filePath containing "roslyn-canonical-misc"
-   * - Real projects return metadata URIs like "csharp:/metadata/..." for NuGet types
+   * - Real projects return metadata URIs for framework/NuGet types
    * 
    * @param filePath - Path to the document
+   * @param line - Line number to check (0-indexed)
+   * @param character - Character position to check (0-indexed)
    * @param maxRetries - Maximum number of retry attempts (default: 60)
    * @param retryDelayMs - Delay between retries in ms (default: 1000)
    */
   async waitForRealProjectLoad(
-    filePath: string, 
+    filePath: string,
+    line: number,
+    character: number,
     maxRetries: number = 60,
     retryDelayMs: number = 1000
   ): Promise<void> {
@@ -493,27 +501,36 @@ export class RoslynLspClient {
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        // Use line 18 (0-indexed), character 19 which points to JsonConvert from Newtonsoft.Json
-        // This is a NuGet type that won't exist in Canonical but will in real project
-        const typeDefResult = await this.getTypeDefinition(filePath, 18, 19);
+        const typeDefResult = await this.getTypeDefinition(filePath, line, character);
         
         if (typeDefResult && typeDefResult.length > 0) {
           const resultUri = typeDefResult[0].uri;
           
           // Check if the result URI contains "roslyn-canonical-misc" (still in Canonical)
           if (resultUri.includes('roslyn-canonical-misc')) {
-            this.log(`  [Attempt ${attempt}/${maxRetries}] Still in Canonical project, retrying...`, 'verbose');
-          } else if (resultUri.startsWith('csharp:/metadata/') || resultUri.includes('/MetadataAsSource/')) {
-            // Got metadata URI for NuGet package - SUCCESS!
-            // Can be either csharp:/metadata/... or file:///tmp/MetadataAsSource/...
+            this.log(
+              `  [Attempt ${attempt}/${maxRetries}] Still in Canonical project, retrying...`,
+              'verbose'
+            );
+          } else if (
+            resultUri.startsWith('csharp:/metadata/') ||
+            resultUri.includes('/MetadataAsSource/')
+          ) {
+            // Got metadata URI - SUCCESS! Document is in real project
             this.log(`✅ Document loaded into real project (attempt ${attempt})`, 'info');
             this.log(`   Result URI: ${resultUri}`, 'verbose');
             return;
           } else {
-            this.log(`  [Attempt ${attempt}/${maxRetries}] Got unexpected URI: ${resultUri}`, 'verbose');
+            this.log(
+              `  [Attempt ${attempt}/${maxRetries}] Got unexpected URI: ${resultUri}`,
+              'verbose'
+            );
           }
         } else {
-          this.log(`  [Attempt ${attempt}/${maxRetries}] No type definition found, project still loading...`, 'verbose');
+          this.log(
+            `  [Attempt ${attempt}/${maxRetries}] No type definition found, project still loading...`,
+            'verbose'
+          );
         }
         
       } catch (error) {
@@ -657,7 +674,7 @@ export class RoslynLspClient {
     }
 
     // Wait for document to be in real project (not Canonical)
-    await this.waitForRealProjectLoad(filePath);
+    await this.waitForRealProjectLoad(filePath, line, character);
 
     // Try type definition first
     const typeDefinitions = await this.getTypeDefinition(filePath, line, character);

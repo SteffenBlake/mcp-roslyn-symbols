@@ -17,6 +17,13 @@ yarn-error.log*
 .pnp.*
 .yarn/
 
+# Temporary and test files
+*.js
+!vitest.config.js
+*.bak
+*.old
+*.tmp
+
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/

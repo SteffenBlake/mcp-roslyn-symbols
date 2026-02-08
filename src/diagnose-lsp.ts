@@ -33,7 +33,8 @@ async function diagnose() {
     
     // Now try to get symbols for JsonConvert (the critical NuGet test)
     // getSymbolsFor will handle waiting for real project load internally
-    console.log(`\n⏱️  [${((Date.now() - startTime) / 1000).toFixed(1)}s] Testing JsonConvert (NuGet) symbol retrieval...`);
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`\n⏱️  [${elapsed}s] Testing JsonConvert (NuGet) symbol retrieval...`);
     console.log('   Position: Line 18, Character 19 (JsonConvert.SerializeObject)');
     
     const result = await client.getSymbolsFor(programFile, 18, 19);
