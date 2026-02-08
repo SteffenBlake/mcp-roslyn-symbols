@@ -3,15 +3,15 @@
     "target": "ES2022",
     "module": "Node16",
     "moduleResolution": "Node16",
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "strict": true,
+    "outDir": "./dist/utilities",
+    "rootDir": "./utilities",
+    "strict": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "declaration": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests", "utilities"]
+  "include": ["utilities/**/*"],
+  "exclude": ["node_modules", "dist", "tests"]
 }

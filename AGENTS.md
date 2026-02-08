@@ -97,11 +97,27 @@ npm test
 
 ## Code Quality Standards
 
-1. **No arbitrary timeouts** - Use LSP callbacks and notifications
-2. **No manual file generation** - Use CLI tools
-3. **Guard clauses over nesting** - Reduce complexity
-4. **Proper error handling** - Don't silently fail
-5. **Clean up temporary files** - Remove debugging scripts
+### MANDATORY REQUIREMENTS
+
+1. **ALL TESTS MUST PASS** 
+   - ❌ NEVER commit code with failing tests
+   - ❌ NEVER dismiss test failures as "unrelated" or "not your problem"
+   - ✅ ALWAYS investigate and fix ALL failing tests before committing
+   - ✅ If a test is truly unrelated, document WHY and get approval
+
+2. **FOLLOW PROFESSIONAL STANDARDS**
+   - ✅ ALWAYS sanity check decisions against industry best practices
+   - ✅ Follow standard conventions (e.g., Node.js packages output to `dist/`, not `dist/src/`)
+   - ✅ Use proper directory structures that match ecosystem expectations
+   - ✅ Don't invent non-standard patterns without strong justification
+
+3. **TECHNICAL EXCELLENCE**
+   - **No arbitrary timeouts** - Use LSP callbacks and notifications
+   - **No manual file generation** - Use CLI tools
+   - **Guard clauses over nesting** - Reduce complexity
+   - **Proper error handling** - Don't silently fail
+   - **Clean up temporary files** - Remove debugging scripts
+   - **Proper output structure** - Follow Node.js package conventions
 
 ## LSP Communication
 

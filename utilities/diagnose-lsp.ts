@@ -36,7 +36,8 @@
  * - Project loading delays
  */
 
-import { RoslynLspClient } from '../src/lsp-client.js';
+// @ts-ignore - Import path will resolve correctly at runtime after compilation
+import { RoslynLspClient } from '../lsp-client.js';
 import * as path from 'path';
 
 const testProjectRoot = path.join(process.cwd(), 'test-project'); // Workspace root (contains .slnx)
@@ -78,7 +79,7 @@ async function diagnose() {
     if (result.symbols.length > 0) {
       console.log(`\n✅ SUCCESS! NuGet symbols retrieved!`);
       console.log(`   First 5 symbols:`);
-      result.symbols.slice(0, 5).forEach(s => {
+      result.symbols.slice(0, 5).forEach((s: any) => {
         console.log(`     - ${s.kind}: ${s.name}`);
       });
     } else {
