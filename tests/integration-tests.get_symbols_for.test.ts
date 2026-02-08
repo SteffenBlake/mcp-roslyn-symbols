@@ -150,16 +150,9 @@ describe('Integration Tests - getSymbolsFor()', () => {
         console.log(`  Source URI: ${result.sourceUri}`);
       }
 
-      // NOTE: JsonConvert from NuGet packages may not resolve in Canonical project
-      // This is a known Roslyn LSP limitation when files are opened without full solution context
-      // For now, we just verify the method doesn't crash
-      // TODO: Investigate solution association to make this work reliably
-      
-      if (result.symbols.length === 0) {
-        console.log('  ⚠️  WARNING: JsonConvert symbols not retrieved (known Roslyn limitation in Canonical project)');
-        console.log('  This is acceptable - the important thing is the method handles this gracefully');
-        return; // Skip assertions for now
-      }
+      // Verify we got symbols - now that we wait for real project load,
+      // JsonConvert from NuGet packages should resolve correctly
+      expect(result.symbols.length).toBeGreaterThan(0);
 
       // JsonConvert should have SerializeObject and DeserializeObject methods
       const symbolNames = result.symbols.map((s: FormattedSymbol) => s.name);

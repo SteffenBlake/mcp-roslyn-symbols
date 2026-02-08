@@ -97,11 +97,27 @@ npm test
 
 ## Code Quality Standards
 
-1. **No arbitrary timeouts** - Use LSP callbacks and notifications
-2. **No manual file generation** - Use CLI tools
-3. **Guard clauses over nesting** - Reduce complexity
-4. **Proper error handling** - Don't silently fail
-5. **Clean up temporary files** - Remove debugging scripts
+### MANDATORY REQUIREMENTS
+
+1. **ALL TESTS MUST PASS** 
+   - ❌ NEVER commit code with failing tests
+   - ❌ NEVER dismiss test failures as "unrelated" or "not your problem"
+   - ✅ ALWAYS investigate and fix ALL failing tests before committing
+   - ✅ If a test is truly unrelated, document WHY and get approval
+
+2. **FOLLOW PROFESSIONAL STANDARDS**
+   - ✅ ALWAYS sanity check decisions against industry best practices
+   - ✅ Follow standard conventions (e.g., Node.js packages output to `dist/`, not `dist/src/`)
+   - ✅ Use proper directory structures that match ecosystem expectations
+   - ✅ Don't invent non-standard patterns without strong justification
+
+3. **TECHNICAL EXCELLENCE**
+   - **No arbitrary timeouts** - Use LSP callbacks and notifications
+   - **No manual file generation** - Use CLI tools
+   - **Guard clauses over nesting** - Reduce complexity
+   - **Proper error handling** - Don't silently fail
+   - **Clean up temporary files** - Remove debugging scripts
+   - **Proper output structure** - Follow Node.js package conventions
 
 ## LSP Communication
 
@@ -120,6 +136,8 @@ The Roslyn Language Server communicates via JSON-RPC over stdio:
 │   ├── index.ts          # MCP server main entry
 │   ├── lsp-client.ts     # Roslyn LSP client
 │   └── roslyn-check.ts   # Installation checker
+├── utilities/
+│   └── diagnose-lsp.ts   # LSP diagnostic tool (verbose debugging)
 ├── tests/
 │   ├── e2e-symbol-retrieval.test.ts  # Main E2E tests
 │   └── *.test.ts         # Unit tests
@@ -132,19 +150,29 @@ The Roslyn Language Server communicates via JSON-RPC over stdio:
 └── README.md             # User documentation (for humans)
 ```
 
+## Utilities Directory
+
+The `utilities/` directory contains diagnostic and testing tools that help debug and verify LSP functionality:
+
+- **diagnose-lsp.ts**: Verbose LSP diagnostic tool for debugging project loading and symbol resolution
+- All future "test stuff out" scripts should go in the `utilities/` subdirectory
+- These are NOT production code - they are development/debugging tools
+- Run utilities from compiled output: `node dist/utilities/<script-name>.js`
+
 ## What NOT to Do
 
-❌ Don't create manual test scripts (manual-test.ts, test-decompilation.ts, etc.)
+❌ Don't create manual test scripts outside the `utilities/` directory
 ❌ Don't manually create .sln or .slnx files
 ❌ Don't manually create .csproj files
 ❌ Don't use arbitrary timeouts instead of callbacks
 ❌ Don't ignore LSP installation requirements
-❌ Don't commit debugging/temporary files
+❌ Don't commit debugging/temporary files to the root directory
 
 ## What TO Do
 
 ✅ Use dotnet CLI for all .NET project operations
 ✅ Use LSP callbacks for synchronization
 ✅ Follow existing test patterns
+✅ Place diagnostic/testing scripts in `utilities/` directory
 ✅ Clean up after debugging
 ✅ Document significant changes

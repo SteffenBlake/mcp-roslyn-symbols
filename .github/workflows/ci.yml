@@ -40,16 +40,13 @@ jobs:
     - name: Install npm dependencies
       run: npm ci
       
-    - name: Build TypeScript
-      run: npm run build
-      
     - name: Run tests
       run: npm test
       
     - name: Check for uncommitted changes
       run: |
         if [[ -n $(git status --porcelain) ]]; then
-          echo "Error: There are uncommitted changes after build"
+          echo "Error: There are uncommitted changes after tests"
           git status
           git diff
           exit 1
