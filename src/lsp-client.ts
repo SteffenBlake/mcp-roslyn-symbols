@@ -473,38 +473,43 @@ export class RoslynLspClient {
    * Waits for document to be loaded into the real project (not Canonical).
    * 
    * Strategy:
-   * 1. Poll using typeDefinition on a known NuGet type (JsonConvert at line 18)
+   * 1. Poll using typeDefinition on the actual position being queried
    * 2. Check the returned URI:
-   *    - Contains "roslyn-canonical-misc" → still in Canonical, retry
-   *    - Starts with "csharp:/metadata/" or contains "/MetadataAsSource/" → in real project, success!
-   *    - Empty/null → still loading, retry
-   * 3. Retry with delay until success or timeout
+   *    - Contains "roslyn-canonical-misc" → still in Canonical project, retry
+   *    - Does NOT contain "roslyn-canonical-misc" → in real project, success!
+   *    - Empty/null → might be loading OR symbol doesn't support typeDefinition
+   * 3. After enough attempts without a Canonical result, assume real project loaded
    * 
-   * This method always checks line 18, char 19 (JsonConvert from Newtonsoft.Json)
-   * regardless of what symbol the user is querying. This is because JsonConvert
-   * is a NuGet package type that only exists in the real project, making it a
-   * reliable indicator that the real project (not Canonical) has loaded.
+   * The key insight is that Canonical project URIs ALWAYS contain "roslyn-canonical-misc".
+   * If we get no result or a non-Canonical result repeatedly, the real project has likely loaded.
    * 
    * Based on Roslyn source code:
    * - Canonical projects have filePath containing "roslyn-canonical-misc"
-   * - Real projects return metadata URIs for NuGet types
+   * - Real projects return normal file URIs or metadata URIs without this pattern
+   * - Some symbols (especially in complex expressions) might not have typeDefinition available
    * 
    * @param filePath - Path to the document
+   * @param line - Line number to check (0-indexed)
+   * @param character - Character position to check (0-indexed)
    * @param maxRetries - Maximum number of retry attempts (default: 60)
    * @param retryDelayMs - Delay between retries in ms (default: 1000)
    */
   async waitForRealProjectLoad(
     filePath: string,
+    line: number,
+    character: number,
     maxRetries: number = 60,
     retryDelayMs: number = 1000
   ): Promise<void> {
     this.log('⏳ Waiting for document to load into real project (not Canonical)...', 'info');
     
+    let consecutiveNonCanonicalAttempts = 0;
+    const minConsecutiveNonCanonical = 3; // If we get 3 non-Canonical results in a row, we're good
+    
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        // Always check line 18, char 19 which is JsonConvert from Newtonsoft.Json
-        // This is a NuGet type that only exists in the real project, not in Canonical
-        const typeDefResult = await this.getTypeDefinition(filePath, 18, 19);
+        // Check the actual position being queried by the user
+        const typeDefResult = await this.getTypeDefinition(filePath, line, character);
         
         if (typeDefResult && typeDefResult.length > 0) {
           const resultUri = typeDefResult[0].uri;
@@ -515,29 +520,39 @@ export class RoslynLspClient {
               `  [Attempt ${attempt}/${maxRetries}] Still in Canonical project, retrying...`,
               'verbose'
             );
-          } else if (
-            resultUri.startsWith('csharp:/metadata/') ||
-            resultUri.includes('/MetadataAsSource/')
-          ) {
-            // Got metadata URI - SUCCESS! Document is in real project
+            consecutiveNonCanonicalAttempts = 0; // Reset counter
+          } else {
+            // URI does NOT contain "roslyn-canonical-misc" - we're in the real project!
             this.log(`✅ Document loaded into real project (attempt ${attempt})`, 'info');
             this.log(`   Result URI: ${resultUri}`, 'verbose');
             return;
-          } else {
-            this.log(
-              `  [Attempt ${attempt}/${maxRetries}] Got unexpected URI: ${resultUri}`,
-              'verbose'
-            );
           }
         } else {
+          // No type definition found - could be still loading OR symbol doesn't support typeDefinition
+          // Count this as a non-Canonical result
+          consecutiveNonCanonicalAttempts++;
+          
+          if (consecutiveNonCanonicalAttempts >= minConsecutiveNonCanonical && attempt > 10) {
+            // We've tried enough times and never seen a Canonical result recently
+            // Likely the real project has loaded and this symbol just doesn't have typeDefinition
+            this.log(
+              `✅ Document likely in real project (${consecutiveNonCanonicalAttempts} consecutive ` +
+              `non-Canonical attempts after ${attempt} total attempts)`,
+              'info'
+            );
+            return;
+          }
+          
           this.log(
-            `  [Attempt ${attempt}/${maxRetries}] No type definition found, project still loading...`,
+            `  [Attempt ${attempt}/${maxRetries}] No type definition found, ` +
+            `project still loading... (${consecutiveNonCanonicalAttempts} consecutive non-Canonical)`,
             'verbose'
           );
         }
         
       } catch (error) {
         this.log(`  [Attempt ${attempt}/${maxRetries}] Request failed: ${error}`, 'verbose');
+        consecutiveNonCanonicalAttempts++; // Count errors as non-Canonical too
       }
       
       // Wait before retrying
@@ -677,8 +692,8 @@ export class RoslynLspClient {
     }
 
     // Wait for document to be in real project (not Canonical)
-    // This always checks a known NuGet type (JsonConvert) to reliably detect real project load
-    await this.waitForRealProjectLoad(filePath);
+    // Check the actual position being queried to detect project transition
+    await this.waitForRealProjectLoad(filePath, line, character);
 
     // Try type definition first
     const typeDefinitions = await this.getTypeDefinition(filePath, line, character);
